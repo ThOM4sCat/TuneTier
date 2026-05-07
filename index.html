@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TuneTier</title>
+    
+    <!-- PWA設定 -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#f5f6fa">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="apple-touch-icon" href="icon.png">
+
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <style>
+        :root {
+            --tier-base: #778ca3;
+            --color-ss: #fc5c65;
+            --color-s: #fd9644;
+            --color-a: #fed330;
+            --color-b: #26de81;
+            --color-c: #45aaf2;
+            --color-d: #4b7bec;
+            --color-e: #a55eea;
+            --bg-body: #f5f6fa;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-body);
+            margin: 0; padding: 10px;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; overflow-x: hidden; color: #2d3436;
+        }
+
+        body.allow-scroll { overflow-y: auto; }
+        body:not(.allow-scroll) { overflow-y: hidden; }
+
+        .container { width: 100%; max-width: 450px; display: flex; flex-direction: column; }
+
+        /* セットアップ画面 */
+        #setup-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-body); z-index: 3000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            padding: 20px; box-sizing: border-box; text-align: center;
+        }
+        .setup-msg { font-size: 0.95rem; font-weight: bold; color: #4b6584; margin-bottom: 2rem; }
+        .setup-btns { display: flex; gap: 15px; width: 100%; max-width: 320px; flex-wrap: wrap; justify-content: center; }
+        .btn-setup { flex: 1; min-width: 120px; padding: 15px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 0.9rem; }
+        .btn-tutorial { background: white; color: #4b6584; border: 2px solid #dfe6e9; }
+        .btn-upload-init { background: #2d3436; color: white; }
+        .btn-lang-init { background: none; border: 1px solid #dfe6e9; color: #b2bec3; font-size: 0.8rem; margin-top: 1.5rem; width: 80px; padding: 8px; }
+
+        /* ヘッダー */
+        .header-info { text-align: center; flex-shrink: 0; padding-top: 5px; position: relative; perspective: 1000px; margin-bottom: 1.5rem; }
+        .tutorial-disclaimer { font-size: 0.65rem; color: #fc5c65; font-weight: bold; height: 1rem; margin-top: 0.5rem; display: none; }
+        
+        .app-name { 
+            font-size: 1.6rem; font-weight: 900; color: #4b6584; 
+            margin: 0.5rem 0; letter-spacing: -0.05rem; line-height: 1;
+            cursor: pointer; transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-block;
+        }
+        .app-name.rotating { transform: rotateX(720deg); }
+
+        .lang-switch-top { position: absolute; top: 10px; left: 0; z-index: 2000; }
+        .btn-lang-toggle { background: none; border: 1px solid #dfe6e9; border-radius: 6px; color: #b2bec3; font-size: 0.65rem; padding: 5px 8px; cursor: pointer; font-weight: bold; }
+
+        /* ハンバーガーメニュー */
+        .hamburger-menu { position: absolute; top: 0px; right: 0; z-index: 2000; }
+        .hamburger-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #4b6584; padding: 10px; }
+        .menu-content {
+            display: none; position: absolute; top: 45px; right: 0;
+            background: white; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 180px; overflow: hidden; text-align: left;
+        }
+        .menu-content.show { display: block; }
+        .menu-item { padding: 12px 15px; font-size: 0.85rem; border-bottom: 1px solid #f1f2f6; cursor: pointer; display: block; width: 100%; border: none; background: none; text-align: left; color: #2d3436; font-family: inherit; }
+        .menu-item:hover { background-color: #f8f9fa; }
+        .menu-item.danger { color: var(--color-ss); }
+
+        /* ティアボード */
+        .tier-board { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+        .tier-row { display: flex; background-color: var(--tier-base); min-height: 46px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(0,0,0,0.1); }
+        .tier-label { width: 38px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.75rem; color: #fff; flex-shrink: 0; text-align: center; word-break: break-all; padding: 2px; }
+        .tier-drop-area { flex-grow: 1; display: flex; flex-wrap: wrap; padding: 3px; gap: 4px; min-height: 40px; }
+        .tier-drop-area.drag-over { background-color: rgba(255,255,255,0.2) !important; }
+
+        .ss .tier-label { background-color: var(--color-ss); }
+        .s  .tier-label { background-color: var(--color-s); }
+        .a  .tier-label { background-color: var(--color-a); }
+        .b  .tier-label { background-color: var(--color-b); }
+        .c  .tier-label { background-color: var(--color-c); }
+        .d  .tier-label { background-color: var(--color-d); }
+        .e  .tier-label { background-color: var(--color-e); }
+
+        /* 楽曲チップ */
+        .song-item {
+            background: white; border-radius: 4px; padding: 6px 10px; height: 50px;
+            width: calc(100% - 4px); box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex; flex-direction: column; box-sizing: border-box; 
+            border: 1px solid #eee; transition: width 0.2s ease, opacity 0.3s ease;
+            touch-action: none; overflow: hidden; position: relative;
+        }
+        .tier-drop-area .song-item { width: 72px; justify-content: center; padding: 4px; }
+        .pool-area .song-item { justify-content: flex-end; padding-bottom: 6px; }
+        .song-title { font-size: 0.72rem; font-weight: bold; line-height: 1.1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding-right: 14px; pointer-events: none; }
+        .song-artist { font-size: 0.55rem; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 14px; pointer-events: none; }
+        .yt-link { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; background: #f1f2f6; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #b2bec3; cursor: pointer; border: 1px solid #dfe6e9; z-index: 10; }
+
+        @keyframes shrinkAndFade {
+            0% { transform: scale(1); width: 72px; opacity: 1; margin: 0 4px 0 0; padding: 4px; }
+            100% { transform: scale(0); width: 0; opacity: 0; margin: 0; padding: 0; border: 0; }
+        }
+        .is-disappearing { animation: shrinkAndFade 0.4s forwards cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none; }
+
+        /* プール */
+        .pool-container { margin-top: 15px; background: #d1d8e0; border-radius: 8px; border: 2px dashed var(--tier-base); position: relative; overflow: hidden; height: 95px; }
+        .pool-area { display: flex; flex-direction: column; gap: 6px; padding: 8px; height: 100%; }
+        .pool-container::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 45px; background: linear-gradient(to bottom, transparent, #d1d8e0 90%); pointer-events: none; z-index: 5; }
+        .pool-area .song-item { display: none; }
+        .pool-area .song-item:nth-child(1), .pool-area .song-item:nth-child(2) { display: flex; }
+        .pool-area .song-item:nth-child(2) { opacity: 0.3; }
+
+        .sortable-drag { border: 2px solid #74b9ff !important; opacity: 1 !important; z-index: 9999 !important; box-shadow: 0 10px 25px rgba(0,0,0,0.2) !important; justify-content: center !important; }
+        .sortable-ghost { opacity: 0.2; background: #dfe6e9 !important; }
+
+        /* 操作パネル */
+        .footer-controls { padding: 10px 0; flex-shrink: 0; width: 100%; }
+        .filter-row { display: flex; gap: 5px; margin-bottom: 8px; align-items: stretch; justify-content: center; }
+        .search-bar { flex: 1; min-width: 0; padding: 8px; border-radius: 8px; border: 1px solid #dfe6e9; font-size: 0.75rem; outline: none; }
+        .btn-unrated { padding: 0 8px; border-radius: 8px; border: 1px solid #dfe6e9; background: white; font-size: 0.65rem; font-weight: bold; color: #b2bec3; cursor: pointer; }
+        .btn-unrated.active { background-color: var(--color-b); color: white; border-color: var(--color-b); }
+        .filter-select { padding: 8px 4px; border-radius: 8px; border: 1px solid #dfe6e9; background: white; font-size: 0.7rem; outline: none; color: #636e72; }
+
+        .btn-submit { width: 100%; padding: 14px; background: #26de81; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-bottom: 6px; }
+        .btn-ranking { width: 100%; padding: 10px; background: #2d3436; color: white; border: none; border-radius: 8px; font-size: 0.85rem; font-weight: bold; cursor: pointer; }
+
+        .stats-info { text-align: center; font-size: 0.65rem; color: #b2bec3; margin-top: 10px; display: flex; justify-content: center; gap: 15px; }
+
+        /* ランキングセクション */
+        #ranking-display { display: none; width: 100%; max-width: 400px; margin-top: 20px; background: white; border-radius: 12px; padding: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); box-sizing: border-box; margin-bottom: 50px; }
+        .rank-tabs { display: flex; gap: 5px; margin-bottom: 12px; }
+        .rank-tab-btn { flex: 1; padding: 8px; font-size: 0.75rem; border-radius: 6px; border: 1px solid #f1f2f6; background: #f9fafb; cursor: pointer; font-weight: bold; color: #b2bec3; }
+        .rank-tab-btn.active { background: #636e72; color: white; border-color: #636e72; }
+        .rank-search { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #f1f2f6; margin-bottom: 10px; font-size: 0.8rem; outline: none; background: #f9fafb; box-sizing: border-box;}
+        
+        table { width: 100%; border-collapse: collapse; }
+        td { padding: 10px 4px; border-bottom: 1px solid #f1f2f6; font-size: 0.8rem; vertical-align: middle; }
+        .rank-col { font-weight: bold; width: 30px; color: #b2bec3; }
+        .score-box { display: flex; align-items: center; justify-content: flex-end; gap: 4px; font-family: monospace; }
+        .arrow-up { color: #26de81; font-weight: bold; }
+        .arrow-down { color: #fc5c65; font-weight: bold; }
+        .reliability { font-size: 0.6rem; margin-right: 4px; padding: 1px 3px; border-radius: 3px; font-weight: bold; }
+        .rel-low { color: #b2bec3; } .rel-mid { color: #fd9644; } .rel-high { color: #26de81; }
+
+        /* モーダル */
+        #modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 4000; display: none; justify-content: center; align-items: center; }
+        .modal-card { background: white; width: 85%; max-width: 320px; border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; }
+        .tier-input-group { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .tier-input { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #dfe6e9; outline: none; font-size: 0.85rem; }
+        .btn-modal-save { width: 100%; padding: 12px; background: #2d3436; color: white; border: none; border-radius: 8px; font-weight: bold; margin-top: 15px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div id="setup-screen" style="display:none;">
+    <div class="app-name" style="margin-top:0; margin-bottom:1rem;">TuneTier</div>
+    <div class="setup-msg" id="setup-msg">楽曲データ(JSON)をアップロードしてください。</div>
+    <div class="setup-btns">
+        <button class="btn-setup btn-tutorial" id="btn-tutorial" onclick="loadTutorial()">チュートリアル</button>
+        <button class="btn-setup btn-upload-init" id="btn-upload-init" onclick="triggerSongImport()">アップロード</button>
+    </div>
+    <button class="btn-lang-init" onclick="toggleLang()">English</button>
+</div>
+
+<div class="container">
+    <div class="header-info">
+        <div class="lang-switch-top"><button class="btn-lang-toggle" onclick="toggleLang()">EN / JP</button></div>
+        <div id="tutorial-disclaimer" class="tutorial-disclaimer">※曲名・アーティスト名は架空のものです</div>
+        <div class="hamburger-menu">
+            <button class="hamburger-btn" onclick="toggleMenu()">☰</button>
+            <div id="menu-content" class="menu-content">
+                <button class="menu-item" id="menu-tier-name" onclick="openTierModal()">ティア名変更</button>
+                <button class="menu-item" id="menu-song-data" onclick="triggerSongImport()">楽曲データ読み込み</button>
+                <button class="menu-item" id="menu-export" onclick="exportData()">データ保存</button>
+                <button class="menu-item" id="menu-import" onclick="triggerImport()">データ移行</button>
+                <button class="menu-item danger" id="menu-reset" onclick="resetData()">全データリセット</button>
+                <input type="file" id="song-import-input" style="display:none" accept=".json" onchange="importNewSongList(event)">
+                <input type="file" id="import-input" style="display:none" accept=".json" onchange="importRankingData(event)">
+            </div>
+        </div>
+        <div class="app-name" id="app-logo" onclick="handleLogoClick()">TuneTier</div>
+    </div>
+
+    <div class="tier-board">
+        <div class="tier-row ss" data-ratio="1.0" id="row-ss"><div class="tier-label" id="label-ss">SS</div><div class="tier-drop-area" id="tier-ss"></div></div>
+        <div class="tier-row s" data-ratio="0.66" id="row-s"><div class="tier-label" id="label-s">S</div><div class="tier-drop-area" id="tier-s"></div></div>
+        <div class="tier-row a" data-ratio="0.33" id="row-a"><div class="tier-label" id="label-a">A</div><div class="tier-drop-area" id="tier-a"></div></div>
+        <div class="tier-row b" data-ratio="0.0" id="row-b"><div class="tier-label" id="label-b">B</div><div class="tier-drop-area" id="tier-b"></div></div>
+        <div class="tier-row c" data-ratio="-0.33" id="row-c"><div class="tier-label" id="label-c">C</div><div class="tier-drop-area" id="tier-c"></div></div>
+        <div class="tier-row d" data-ratio="-0.66" id="row-d"><div class="tier-label" id="label-d">D</div><div class="tier-drop-area" id="tier-d"></div></div>
+        <div class="tier-row e" data-ratio="-1.0" id="row-e"><div class="tier-label" id="label-e">E</div><div class="tier-drop-area" id="tier-e"></div></div>
+    </div>
+
+    <div class="pool-container"><div class="pool-area" id="pool"></div></div>
+
+    <div class="footer-controls">
+        <div class="filter-row">
+            <input type="text" id="artist-search" class="search-bar" placeholder="検索..." oninput="handleFilterChange()">
+            <button id="unrated-toggle" class="btn-unrated" onclick="toggleUnratedOnly()">未評価</button>
+            <select id="rel-filter" class="filter-select" onchange="handleFilterChange()"><option value="all">信頼度</option><option value="low">◯ 暫定</option><option value="mid">◎ 安定</option><option value="high">★ 確定</option></select>
+            <select id="rank-filter" class="filter-select" onchange="handleFilterChange()"><option value="all">順位</option></select>
+        </div>
+        <button class="btn-submit" id="btn-submit" onclick="submitBatch()">一括送信</button>
+        <button class="btn-ranking" id="btn-ranking" onclick="toggleRanking()">ランキングを表示</button>
+        <div class="stats-info">
+            <span id="label-rated">評価済み</span> <span id="eval-percent">0</span>%
+            <span id="label-total-eval">総評価回数</span>: <span id="match-count">0</span>
+        </div>
+    </div>
+
+    <div id="ranking-display">
+        <div class="rank-tabs">
+            <button id="tab-main" class="rank-tab-btn active" onclick="switchRankTab('main')">楽曲</button>
+            <button id="tab-stats" class="rank-tab-btn" onclick="switchRankTab('stats')">アーティスト統計</button>
+        </div>
+        <input type="text" id="rank-search-box" class="rank-search" placeholder="ランキング内を検索..." oninput="renderRanking()">
+        <table><tbody id="rank-body"></tbody></table>
+    </div>
+</div>
+
+<div id="modal-overlay" onclick="closeTierModal(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-title" id="modal-tier-title">ティア名を変更</div>
+        <div id="tier-inputs-container"></div>
+        <button class="btn-modal-save" id="btn-modal-save" onclick="saveTierNames()">保存して反映</button>
+    </div>
+</div>
+
+<script>
+// --- PWA サービスワーカー登録 ---
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+            console.log('SW registered.');
+        }).catch(err => console.log('SW error:', err));
+    });
+}
+
+// --- 翻訳・ロジック ---
+const i18n = {
+    ja: { setupMsg: "楽曲データ(JSON)をアップロードしてください。", tutorial: "チュートリアル", upload: "アップロード", disclaimer: "※曲名・アーティスト名は架空のものです", searchPlaceholder: "検索...", unrated: "未評価", relLabel: "信頼度", rankLabel: "順位", relLow: "◯ 暫定", relMid: "◎ 安定", relHigh: "★ 確定", submit: "一括送信", showRanking: "ランキングを表示", rated: "評価済み", totalEval: "総評価回数", menuTier: "ティア名変更", menuData: "楽曲データ読み込み", menuSave: "データ保存", menuImport: "データ移行", menuReset: "全データリセット", tabSong: "楽曲", tabArtist: "アーティスト統計", rankSearch: "ランキング内を検索...", alertNoItems: "表に曲がありません。", confirmOverwrite: "ランキングデータを上書きします。よろしいですか？", confirmReset: "リセットしますか？", confirmNewList: "新しい楽曲リストを読み込みます。よろしいですか？", avgEval: "平均評価", ratedCount: "評価済み", modalTitle: "ティア名を変更", modalSave: "保存して反映" },
+    en: { setupMsg: "Please upload song data (JSON).", tutorial: "Tutorial", upload: "Upload", disclaimer: "*Names are fictional.", searchPlaceholder: "Search...", unrated: "Unrated", relLabel: "Trust", rankLabel: "Rank", relLow: "◯ Low", relMid: "◎ Mid", relHigh: "★ High", submit: "Submit All", showRanking: "Show Ranking", rated: "Rated", totalEval: "Matches", menuTier: "Edit Tiers", menuData: "Load List", menuSave: "Save Data", menuImport: "Import", menuReset: "Reset All", tabSong: "Songs", tabArtist: "Stats", rankSearch: "Search ranking...", alertNoItems: "No items.", confirmOverwrite: "Overwrite ranking data?", confirmReset: "Reset all?", confirmNewList: "Load new list?", avgEval: "Avg Score", ratedCount: "Rated", modalTitle: "Edit Tier Names", modalSave: "Save" }
+};
+
+let lang = 'ja'; let songs = []; let artists = []; let tierNames = { ss: "SS", s: "S", a: "A", b: "B", c: "C", d: "D", e: "E" }; let currentMode = 'song'; let rankTab = 'main'; let clickCount = 0; let clickTimer = null; let evalCount = 0; let currentSearchTerm = ""; let currentRankFilter = "all"; let currentRelFilter = "all"; let isUnratedOnly = false; let isTutorialMode = false; const M_CONSTANT = 5;
+
+const tutorialSongs = [ { title: "Harmony", artist: "Alice Vance" }, { title: "Radiant", artist: "Liam Miller" }, { title: "Brave", artist: "Olivia Smith" }, { title: "Serenity", artist: "Noah Brown" }, { title: "Spark", artist: "Emma Davis" }, { title: "Endless", artist: "James Wilson" }, { title: "Bright", artist: "Sophia Garcia" }, { title: "Courage", artist: "Lucas Jones" }, { title: "Gentle", artist: "Mia Martinez" }, { title: "Vision", artist: "Ethan Taylor" }, { title: "Pure", artist: "Isabella Anderson" }, { title: "Future", artist: "Mason Thomas" }, { title: "Glow", artist: "Charlotte White" }, { title: "Unity", artist: "Aiden Harris" }, { title: "Echo", artist: "Amelia Martin" }, { title: "Kindness", artist: "Logan Thompson" }, { title: "Skyline", artist: "Harper King" }, { title: "Journey", artist: "Jacob Wright" }, { title: "Imagine", artist: "Evelyn Scott" }, { title: "Delight", artist: "Elijah Green" }, { title: "Believe", artist: "Abigail Hill" }, { title: "Freedom", artist: "Daniel Adams" }, { title: "Breeze", artist: "Emily Baker" }, { title: "Wonder", artist: "Jackson Nelson" }, { title: "Victory", artist: "Avery Carter" } ];
+
+function init() {
+    const sl = localStorage.getItem('TuneTier_Lang'); if (sl) lang = sl;
+    const saved = localStorage.getItem('TuneTier_Ultimate_V27_PWA');
+    if (saved) {
+        const d = JSON.parse(saved); songs = d.songs || []; artists = d.artists || []; tierNames = d.tierNames || tierNames; currentMode = d.currentMode || 'song'; isTutorialMode = d.isTutorial || false;
+        document.getElementById('setup-screen').style.display = 'none';
+        applyTierNames(); updateModeUI(); setupSortable(); updateRankFilterOptions(); fillPool(); updateStats();
+    } else { document.getElementById('setup-screen').style.display = 'flex'; }
+    updateTranslation();
+}
+
+function toggleLang() { lang = (lang === 'ja') ? 'en' : 'ja'; localStorage.setItem('TuneTier_Lang', lang); updateTranslation(); updateRankFilterOptions(); if (document.getElementById('ranking-display').style.display === 'block') renderRanking(); }
+function updateTranslation() {
+    const t = i18n[lang]; document.getElementById('setup-msg').innerText = t.setupMsg; document.getElementById('btn-tutorial').innerText = t.tutorial; document.getElementById('btn-upload-init').innerText = t.upload; document.getElementById('tutorial-disclaimer').innerText = t.disclaimer; document.getElementById('artist-search').placeholder = t.searchPlaceholder; document.getElementById('unrated-toggle').innerText = t.unrated; document.getElementById('btn-submit').innerText = t.submit; document.getElementById('btn-ranking').innerText = t.showRanking; document.getElementById('label-rated').innerText = t.rated; document.getElementById('label-total-eval').innerText = t.totalEval; document.getElementById('menu-tier-name').innerText = t.menuTier; document.getElementById('menu-song-data').innerText = t.menuData; document.getElementById('menu-export').innerText = t.menuSave; document.getElementById('menu-import').innerText = t.menuImport; document.getElementById('menu-reset').innerText = t.menuReset; document.getElementById('tab-main').innerText = (currentMode === 'song') ? t.tabSong : (lang === 'ja' ? "アーティスト" : "Artists"); document.getElementById('tab-stats').innerText = t.tabArtist; document.getElementById('rank-search-box').placeholder = t.rankSearch; document.getElementById('modal-tier-title').innerText = t.modalTitle; document.getElementById('btn-modal-save').innerText = t.modalSave;
+    const relF = document.getElementById('rel-filter'); relF.options[0].text = t.relLabel; relF.options[1].text = t.relLow; relF.options[2].text = t.relMid; relF.options[3].text = t.relHigh;
+}
+
+function openTierModal() {
+    const container = document.getElementById('tier-inputs-container'); container.innerHTML = '';
+    ['ss', 's', 'a', 'b', 'c', 'd', 'e'].forEach(k => {
+        const row = document.createElement('div'); row.className = 'tier-input-group'; row.innerHTML = `<div class="tier-input-label">${k.toUpperCase()}</div><input type="text" id="input-tier-${k}" class="tier-input" value="${tierNames[k]}" maxlength="10">`;
+        container.appendChild(row);
+    });
+    document.getElementById('modal-overlay').style.display = 'flex'; toggleMenu();
+}
+function closeTierModal(e) { if(e.target.id === 'modal-overlay') document.getElementById('modal-overlay').style.display = 'none'; }
+function saveTierNames() { ['ss', 's', 'a', 'b', 'c', 'd', 'e'].forEach(k => { tierNames[k] = document.getElementById(`input-tier-${k}`).value || k.toUpperCase(); }); applyTierNames(); saveData(); document.getElementById('modal-overlay').style.display = 'none'; }
+function applyTierNames() { Object.keys(tierNames).forEach(k => { document.getElementById(`label-${k}`).innerText = tierNames[k]; }); }
+
+function handleLogoClick() {
+    clickCount++; clearTimeout(clickTimer); clickTimer = setTimeout(() => { clickCount = 0; }, 2000);
+    if (clickCount >= 5) {
+        clickCount = 0; const logo = document.getElementById('app-logo'); logo.classList.add('rotating');
+        setTimeout(() => {
+            currentMode = (currentMode === 'song') ? 'artist' : 'song'; if (currentMode === 'artist' && artists.length === 0) generateArtistList();
+            updateModeUI(); updateTranslation(); document.getElementById('pool').innerHTML = ""; updateRankFilterOptions(); fillPool(); updateStats(); saveData(); logo.classList.remove('rotating');
+        }, 600);
+    }
+}
+function updateModeUI() { const logo = document.getElementById('app-logo'); logo.innerText = (currentMode === 'song') ? 'TuneTier' : 'ArtistTier'; document.getElementById('tutorial-disclaimer').style.display = isTutorialMode ? 'block' : 'none'; }
+function generateArtistList() { const uniqueArtists = [...new Set(songs.map(s => s.artist))]; artists = uniqueArtists.map(name => ({ name, rawScoreSum: 0, bayesScore: 0, prevBayesScore: 0, matches: 0 })); }
+function updateRankFilterOptions() {
+    const select = document.getElementById('rank-filter'); const list = (currentMode === 'song') ? songs : artists; const label = i18n[lang].rankLabel;
+    select.innerHTML = `<option value="all">${label}</option>`; if (list.length === 0) return;
+    for (let i = 1; i <= list.length; i += 100) { const end = Math.min(i + 99, list.length); const opt = document.createElement('option'); opt.value = `${i}-${end}`; opt.textContent = `${i}~`; select.appendChild(opt); }
+}
+function loadTutorial() { isTutorialMode = true; songs = tutorialSongs.map(s => ({ artist: s.artist, title: s.title, rawScoreSum: 0, bayesScore: 0, prevBayesScore: 0, matches: 0 })); generateArtistList(); saveData(); location.reload(); }
+function setupSortable() {
+    const tierIds = ['tier-ss', 'tier-s', 'tier-a', 'tier-b', 'tier-c', 'tier-d', 'tier-e'];
+    const common = { group: 'shared', animation: 150, delay: 20, delayOnTouchOnly: true, forceFallback: true, fallbackClass: "sortable-drag", fallbackOnBody: true, swapThreshold: 0.65, ghostClass: 'sortable-ghost', filter: '.yt-link' };
+    new Sortable(document.getElementById('pool'), { ...common, onEnd: (evt) => { if (evt.to.id.startsWith('tier')) { fillPool(); checkBoardLimit(); } } });
+    tierIds.forEach(id => { new Sortable(document.getElementById(id), { ...common, onDragOver: (evt) => { evt.to.classList.add('drag-over'); }, onDragLeave: (evt) => { evt.from.classList.remove('drag-over'); }, onAdd: (evt) => { evt.to.classList.remove('drag-over'); checkBoardLimit(); } }); });
+}
+function toggleUnratedOnly() { isUnratedOnly = !isUnratedOnly; document.getElementById('unrated-toggle').classList.toggle('active', isUnratedOnly); document.getElementById('pool').innerHTML = ""; fillPool(); }
+function handleFilterChange() { currentSearchTerm = document.getElementById('artist-search').value.trim().toLowerCase(); currentRankFilter = document.getElementById('rank-filter').value; currentRelFilter = document.getElementById('rel-filter').value; document.getElementById('pool').innerHTML = ""; fillPool(); }
+function fillPool() {
+    const pool = document.getElementById('pool'); const list = (currentMode === 'song') ? songs : artists; const sorted = [...list].sort((a,b) => b.bayesScore - a.bayesScore); let candidates = list;
+    if (isUnratedOnly) candidates = candidates.filter(s => s.matches === 0);
+    else if (currentRelFilter !== "all") candidates = candidates.filter(s => { if (currentRelFilter === "low") return s.matches >= 1 && s.matches <= 2; if (currentRelFilter === "mid") return s.matches >= 3 && s.matches <= 4; return s.matches >= 5; });
+    if (currentRankFilter !== "all") { const [min, max] = currentRankFilter.split('-').map(Number); const keys = new Set(sorted.slice(min - 1, max).map(s => (currentMode === 'song' ? (s.artist + s.title) : s.name))); candidates = candidates.filter(s => keys.has(currentMode === 'song' ? (s.artist + s.title) : s.name)); }
+    if (currentSearchTerm !== "") candidates = candidates.filter(s => ((currentMode === 'song') ? s.artist : s.name).toLowerCase().includes(currentSearchTerm));
+    if (candidates.length === 0) return;
+    while (pool.children.length < 5) { const ri = candidates[Math.floor(Math.random() * candidates.length)]; pool.appendChild(createItemCard(ri)); }
+}
+function createItemCard(data) {
+    const div = document.createElement('div'); div.className = 'song-item'; div.dataset.entryTime = Date.now();
+    if (currentMode === 'song') { div.dataset.title = data.title; div.dataset.artist = data.artist; div.innerHTML = `<div class="song-title">${data.title}</div><div class="song-artist">${data.artist === 'null' ? '-' : data.artist}</div><div class="yt-link" onclick="openYT('${data.artist}','${data.title}')">🔍</div>`; }
+    else { div.dataset.name = data.name; div.innerHTML = `<div class="song-title">${data.name}</div><div class="song-artist">Artist</div><div class="yt-link" onclick="openYT('${data.name}','')">🔍</div>`; }
+    div.addEventListener('dblclick', () => { if (div.parentElement && div.parentElement.id === 'tier-ss') hallOfFame(div); });
+    return div;
+}
+function openYT(artist, title) { window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(artist + " " + title)}`, '_blank'); }
+async function checkBoardLimit() { let all = []; document.querySelectorAll('.tier-drop-area').forEach(area => { area.querySelectorAll('.song-item:not(.is-disappearing)').forEach(item => all.push(item)); }); if (all.length > 5) { all.sort((a, b) => parseInt(a.dataset.entryTime) - parseInt(b.dataset.entryTime)); await animateAndProcessSingle(all[0]); } }
+function calculateBayesian() {
+    const list = (currentMode === 'song') ? songs : artists; const totalRated = list.reduce((sum, s) => sum + s.matches, 0); const totalRaw = list.reduce((sum, s) => sum + s.rawScoreSum, 0); const gm = totalRated > 0 ? totalRaw / totalRated : 0;
+    list.forEach(s => { if (s.matches > 0) { s.bayesScore = (s.matches * (s.rawScoreSum / s.matches) + M_CONSTANT * gm) / (s.matches + M_CONSTANT); } else { s.bayesScore = gm; } });
+}
+async function hallOfFame(item) {
+    const list = (currentMode === 'song') ? songs : artists; const t = (currentMode === 'song') ? list.find(s => s.title === item.dataset.title && s.artist === item.dataset.artist) : list.find(s => s.name === item.dataset.name);
+    if (t) { t.prevBayesScore = t.bayesScore; t.rawScoreSum += (list.length * 5); t.matches += 5; calculateBayesian(); item.classList.add('is-disappearing'); await new Promise(r => setTimeout(r, 400)); item.remove(); saveData(); updateStats(); if (document.getElementById('ranking-display').style.display === 'block') renderRanking(); }
+}
+async function animateAndProcessSingle(item) {
+    const tr = item.closest('.tier-row'); const list = (currentMode === 'song') ? songs : artists; const t = (currentMode === 'song') ? list.find(s => s.title === item.dataset.title && s.artist === item.dataset.artist) : list.find(s => s.name === item.dataset.name);
+    if (t) { t.prevBayesScore = t.bayesScore; t.rawScoreSum += ((list.length * parseFloat(tr.dataset.ratio)) - Array.from(tr.querySelector('.tier-drop-area').children).indexOf(item)); t.matches++; calculateBayesian(); item.classList.add('is-disappearing'); await new Promise(r => setTimeout(r, 400)); item.remove(); saveData(); updateStats(); if (document.getElementById('ranking-display').style.display === 'block') renderRanking(); }
+}
+async function submitBatch() {
+    const tierIds = ['tier-ss', 'tier-s', 'tier-a', 'tier-b', 'tier-c', 'tier-d', 'tier-e']; const list = (currentMode === 'song') ? songs : artists; let targets = [];
+    tierIds.forEach(id => { const area = document.getElementById(id); const ratio = parseFloat(area.parentElement.dataset.ratio); area.querySelectorAll('.song-item:not(.is-disappearing)').forEach((item, idx) => targets.push({item, ratio, idx})); });
+    if (targets.length === 0) { alert(i18n[lang].alertNoItems); return; }
+    targets.forEach(obj => { const t = (currentMode === 'song') ? list.find(s => s.title === obj.item.dataset.title && s.artist === obj.item.dataset.artist) : list.find(s => s.name === obj.item.dataset.name); if (t) { t.prevBayesScore = t.bayesScore; t.rawScoreSum += ((list.length * obj.ratio) - obj.idx); t.matches++; } obj.item.classList.add('is-disappearing'); });
+    calculateBayesian(); await new Promise(r => setTimeout(r, 400)); targets.forEach(o => o.item.remove()); saveData(); updateStats(); if (document.getElementById('ranking-display').style.display === 'block') renderRanking();
+}
+
+function toggleMenu() { document.getElementById('menu-content').classList.toggle('show'); }
+window.onclick = (e) => { if (!e.target.matches('.hamburger-btn') && !e.target.matches('.app-name')) document.getElementById('menu-content').classList.remove('show'); };
+function exportData() { const blob = new Blob([JSON.stringify({songs, artists, tierNames, isTutorial: isTutorialMode, currentMode}, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "TuneTier_Backup.json"; a.click(); }
+function triggerImport() { document.getElementById('import-input').click(); }
+function importRankingData(event) { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { const imported = JSON.parse(e.target.result); songs = imported.songs || []; artists = imported.artists || []; tierNames = imported.tierNames || tierNames; isTutorialMode = imported.isTutorial || false; currentMode = imported.currentMode || 'song'; updateRankFilterOptions(); updateModeUI(); saveData(); location.reload(); }; reader.readAsText(file); }
+function triggerSongImport() { document.getElementById('song-import-input').click(); }
+function importNewSongList(event) {
+    const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => {
+        try { const newList = JSON.parse(e.target.result); const newSongs = []; const unique = new Set(); newList.forEach(item => { const art = item.artist || item.albumArtistsNames || "Unknown"; const tit = item.title || item.trackName || "Unknown"; if (!unique.has(art + tit)) { unique.add(art + tit); const ex = songs.find(s => s.artist === art && s.title === tit); newSongs.push(ex ? ex : { artist: art, title: tit, rawScoreSum: 0, bayesScore: 0, prevBayesScore: 0, matches: 0 }); } }); songs = newSongs; generateArtistList(); isTutorialMode = false; updateRankFilterOptions(); saveData(); location.reload(); } catch (err) { alert("Error"); }
+    }; reader.readAsText(file);
+}
+function toggleRanking() { const disp = document.getElementById('ranking-display'); if (disp.style.display === 'block') { disp.style.display = 'none'; document.body.classList.remove('allow-scroll'); } else { renderRanking(); disp.style.display = 'block'; document.body.classList.add('allow-scroll'); disp.scrollIntoView({ behavior: 'smooth' }); } }
+function switchRankTab(tab) { rankTab = tab; document.getElementById('tab-main').classList.toggle('active', tab === 'main'); document.getElementById('tab-stats').classList.toggle('active', tab === 'stats'); renderRanking(); }
+function renderRanking() {
+    const keyword = document.getElementById('rank-search-box').value.toLowerCase(); const tbody = document.getElementById('rank-body'); tbody.innerHTML = ''; const t = i18n[lang];
+    if (rankTab === 'main') {
+        const list = (currentMode === 'song') ? songs : artists; const sorted = [...list].sort((a, b) => b.bayesScore - a.bayesScore);
+        sorted.forEach((s, i) => { if (s.matches === 0) return; const nameText = (currentMode === 'song') ? (s.title + s.artist) : s.name; if (keyword && !nameText.toLowerCase().includes(keyword)) return; let arrow = '<span style="color:#dfe6e9">-</span>'; if (s.bayesScore > s.prevBayesScore) arrow = '<span class="arrow-up">↑</span>'; else if (s.bayesScore < s.prevBayesScore) arrow = '<span class="arrow-down">↓</span>'; let rel = s.matches >= 5 ? {c:'rel-high',i:'★'} : (s.matches >= 3 ? {c:'rel-mid',i:'◎'} : {c:'rel-low',i:'◯'}); const tr = document.createElement('tr'); const dTitle = (currentMode === 'song') ? s.title : s.name; const dSub = (currentMode === 'song') ? s.artist : (lang === 'ja' ? "アーティスト" : "Artist"); tr.innerHTML = `<td class="rank-col">${i + 1}</td><td><div style="font-weight:bold; font-size:0.75rem;">${dTitle}</div><div style="font-size:0.6rem; color:#b2bec3">${dSub}</div></td><td style="width:20px;"><div class="yt-link" style="position:static;" onclick="openYT('${dSub === 'Artist' ? dTitle : dSub}','${dSub === 'Artist' ? '' : dTitle}')">🔍</div></td><td style="text-align:right;"><div class="score-box"><span class="reliability ${rel.c}">${rel.i}</span>${arrow} <span>${Math.round(s.bayesScore)}</span></div></td>`; tbody.appendChild(tr); });
+    } else {
+        const artistMap = {}; songs.forEach(s => { if (s.matches > 0) { if (!artistMap[s.artist]) artistMap[s.artist] = { sum: 0, count: 0 }; artistMap[s.artist].sum += s.bayesScore; artistMap[s.artist].count += 1; } });
+        const stats = Object.keys(artistMap).map(name => ({ name, avg: artistMap[name].sum / artistMap[name].count, count: artistMap[name].count })).sort((a,b) => b.avg - a.avg);
+        stats.forEach((as, i) => { if (keyword && !as.name.toLowerCase().includes(keyword)) return; const tr = document.createElement('tr'); tr.innerHTML = `<td class="rank-col">${i + 1}</td><td><div style="font-weight:bold; font-size:0.75rem;">${as.name}</div><div style="font-size:0.6rem; color:#b2bec3">${t.ratedCount}: ${as.count}</div></td><td style="width:20px;"><div class="yt-link" style="position:static;" onclick="openYT('${as.name}','')">🔍</div></td><td style="text-align:right;"><div class="score-box"><span>${Math.round(as.avg)}</span></div></td>`; tbody.appendChild(tr); });
+    }
+}
+function updateStats() { const list = (currentMode === 'song') ? songs : artists; evalCount = list.reduce((sum, s) => sum + s.matches, 0); document.getElementById('match-count').innerText = evalCount; if (list.length > 0) document.getElementById('eval-percent').innerText = Math.floor((list.filter(s => s.matches > 0).length / list.length) * 100); }
+function saveData() { localStorage.setItem('TuneTier_Ultimate_V27_PWA', JSON.stringify({songs, artists, tierNames, isTutorial: isTutorialMode, currentMode})); }
+function resetData() { if (confirm(i18n[lang].confirmReset)) { localStorage.removeItem('TuneTier_Ultimate_V27_PWA'); location.reload(); } }
+
+init();
+</script>
+</body>
+</html>
